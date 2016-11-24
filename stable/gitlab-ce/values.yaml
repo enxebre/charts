@@ -22,7 +22,7 @@ image: gitlab/gitlab-ce:8.13.3-ce.0
 ## For minikube, set this to NodePort, elsewhere use LoadBalancer
 ## ref: http://kubernetes.io/docs/user-guide/services/#publishing-services---service-types
 ##
-serviceType: LoadBalancer
+serviceType: NodePort
 
 ## Configure resource requests and limits
 ## ref: http://kubernetes.io/docs/user-guide/compute-resources/
@@ -46,7 +46,7 @@ persistence:
   ## This volume persists generated configuration files, keys, and certs.
   ##
   gitlabEtc:
-    enabled: true
+    enabled: false
     size: 1Gi
     storageClass: generic
     accessMode: ReadWriteOnce
@@ -54,7 +54,7 @@ persistence:
   ## ref: https://docs.gitlab.com/omnibus/settings/configuration.html#storing-git-data-in-an-alternative-directory
   ##
   gitlabData:
-    enabled: true
+    enabled: false
     size: 10Gi
     storageClass: generic
     accessMode: ReadWriteOnce

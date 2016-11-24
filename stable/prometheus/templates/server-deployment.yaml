@@ -36,6 +36,8 @@ spec:
           image: "{{ .Values.server.image }}"
           imagePullPolicy: {{ default "" .Values.imagePullPolicy | quote }}
           args:
+            - --web.external-url=http://178.62.116.76:8080/api/v1/proxy/namespaces/kube-system/services/prometheus
+            - --web.route-prefix=/
             - --alertmanager.url=http://{{ template "alertmanager.fullname" . }}:{{ .Values.alertmanager.httpPort }}
             - --config.file=/etc/config/prometheus.yml
             - --storage.local.path={{ default "/data" .Values.server.storageLocalPath | quote }}

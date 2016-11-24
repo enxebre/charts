@@ -45,7 +45,7 @@ alertmanager:
     ## If true, AlertManager will create a Persistent Volume Claim
     ## If false, use emptyDir
     ##
-    enabled: true
+    enabled: false
 
     ## AlertManager data Persistent Volume access modes
     ## Must match those of existing PV or dynamic provisioner
@@ -195,7 +195,7 @@ server:
     ## If true, Server will create a Persistent Volume Claim
     ## If false, use emptyDir
     ##
-    enabled: true
+    enabled: false
 
     ## Server data Persistent Volume access modes
     ## Must match those of existing PV or dynamic provisioner
@@ -247,25 +247,34 @@ server:
 ##
 alertmanagerFiles:
   alertmanager.yml: |
-    global:
-      # slack_api_url: ''
-
     receivers:
-      - name: default-receiver
-        # slack_configs:
-        #  - channel: '@you'
-        #    send_resolved: true
+    - name: default-receiver
+      slack_configs:
+      - api_url: ''
+        channel: '#general'
+        send_resolved: true
 
     route:
       group_wait: 10s
-      group_interval: 5m
+      group_interval: 1m
       receiver: default-receiver
-      repeat_interval: 3h
+      repeat_interval: 1m
 
 ## Server ConfigMap entries
 ##
 serverFiles:
-  alerts: ""
+  alerts: |
+    ALERT HelloWorld
+    IF count(container_tasks_state{state="stopped"})>1
+    FOR 1m
+    LABELS {
+      severity = "critical"
+    }
+    ANNOTATIONS {
+      summary = "Hello world container_tasks_state",
+      description = "If a least one container_tasks_state has state stopped",
+    }
+
   rules: ""
 
   prometheus.yml: |
@@ -309,7 +318,7 @@ serverFiles:
           # so this should only be disabled in a controlled environment. You can
           # disable certificate verification by uncommenting the line below.
           #
-          # insecure_skip_verify: true
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
         # Keep only the default/kubernetes service endpoints for the https port. This
@@ -338,7 +347,7 @@ serverFiles:
           # so this should only be disabled in a controlled environment. You can
           # disable certificate verification by uncommenting the line below.
           #
-          # insecure_skip_verify: true
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
         kubernetes_sd_configs:
