@@ -41,5 +41,6 @@ If not using ClusterIP, or if a host or LoadBalancerIP is not defined, the value
 */}}
 {{- define "host" -}}
 {{- $host := index .Values (printf "%sHost" .Chart.Name) | default "" -}}
-{{- default (include "serviceIP" .) $host -}}
+{{- $ingress := index .Values "ingressDomain" | default "" -}}
+{{- default $ingress (include "serviceIP" .) | default  $host -}}
 {{- end -}}

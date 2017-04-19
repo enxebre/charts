@@ -9,7 +9,7 @@ metadata:
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
 spec:
-  replicas: 1
+  replicas: {{ default 1 .Values.replicas }}
   template:
     metadata:
       labels:
@@ -81,9 +81,23 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-        - name: ghost-data
-          mountPath: /bitnami/ghost
+        # - name: ghost-data
+        #   mountPath: /bitnami/ghost
+        - name: config-volume
+          mountPath: /bitnami/ghost/config.js
+          subPath: config.js
+        - name: config-volume
+          mountPath: /bitnami/ghost/.initialized
+          subPath: .initialized.js          
       volumes:
+      - name: config-volume
+        configMap:
+          name: {{ template "fullname" . }}        
+          items:
+            - key: config.js
+              path: config.js
+            - key: .initialized
+              path: .initialized
       - name: ghost-data
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:

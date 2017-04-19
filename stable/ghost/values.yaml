@@ -24,6 +24,11 @@ ghostPort: 80
 ##
 # ghostLoadBalancerIP:
 
+## ingressDomain for the Ghost Service.
+## Expose Ghost through an Ingress Controller on the urn fullname.ingressDomain
+##
+# ingressDomain:
+
 ## User of the application
 ## ref: https://github.com/bitnami/bitnami-docker-ghost#configuration
 ##
@@ -53,6 +58,10 @@ ghostBlogTitle: User's Blog
 # smtpUser:
 # smtpPassword:
 # smtpService:
+
+#replicas:
+
+# config:
 
 ##
 ## MariaDB chart configuration

@@ -1,0 +1,14 @@
+{{- if .Values.ingressDomain -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: "{{ template "fullname" . }}"
+spec:
+  rules:
+  - host: "{{ include "fullname" . | trunc 24 }}.{{.Values.ingressDomain}}"
+    http:
+      paths:
+      - backend:
+          serviceName: "{{ template "fullname" . }}"
+          servicePort: http
+{{- end -}}

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    app: {{ template "fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+{{- if .Values.config }}
+  config.js: {{ .Values.config | indent 4 }}
+{{- else }}
+  config.js: |-
+    var path = require('path'),
+        config;
+
+    config = {
+        // ### Production
+        // When running Ghost in the wild, use the production environment.
+        // Configure your URL and mail settings here
+        production: {
+            url: 'http://0.0.0.0',
+            mail: {},
+            database: {
+                client: 'mysql',
+                connection: {
+                    host     : '{{ template "mariadb.fullname" . }}',
+                    port     : '3306',
+                    user     : '{{ .Values.mariadb.mariadbUser }}',
+                    password : '{{ .Values.mariadb.mariadbPassword }}',
+                    database : '{{ .Values.mariadb.mariadbDatabase }}',
+                    charset  : 'utf8'
+                },
+                debug: false
+            },
+
+            server: {
+                host: '0.0.0.0',
+                port: '2368'
+            }
+        }
+    };
+    module.exports = config;
+{{- end }}
+  .initialized: |-
+    This file ensures nami does not create a new db and user.

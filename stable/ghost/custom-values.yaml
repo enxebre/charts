@@ -1,0 +1,12 @@
+persistence:
+  enabled: false
+
+serviceType: ClusterIP
+ingressDomain: 52.215.24.82.nip.io
+
+mariadb:
+  mariadbRootPassword: rootUser0
+  mariadbUser: testUser
+  mariadbPassword: testUser0
+  mariadbDatabase: blog
+

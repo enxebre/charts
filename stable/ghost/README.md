@@ -8,6 +8,189 @@
 $ helm install stable/ghost
 ```
 
+## Cluster Deployment
+
+Tested with:
+
+- Kubernetes v1.6.1_coreos.0 deployed in aws with Kubeform.
+
+- bitnami/ghost:0.11.7-r1
+
+- Helm Client: &version.Version{SemVer:"v2.3.0", GitCommit:"d83c245fc324117885ed83afc90ac74afed271b4", GitTreeState:"clean"}
+
+- Kubectl Client Version: version.Info{Major:"1", Minor:"6", GitVersion:"v1.6.1", GitCommit:"b0b7a323cc5a4a2019b2e9520c21c7830b7f708e", GitTreeState:"clean", BuildDate:"2017-04-03T20:44:38Z", GoVersion:"go1.7.5", Compiler:"gc", Platform:"darwin/amd64"}
+
+```helm dependency update```
+
+```helm install -f custom-values.yaml ./```
+
+```helm upgrade -f custom-values.yaml --set replicas=3 loitering-ibex ./```
+
+### Creating a self contained Helm Repo
+If you have restricted access on your environment you can make your chart available on a local helm server on demand by running a Docker file like this:
+
+```
+FROM alpine:3.4
+RUN apk --update add ca-certificates
+RUN mkdir /usr/chart
+COPY . /usr/chart
+RUN /usr/chart/helm_installer.sh
+WORKDIR /usr/chart
+RUN helm lint
+RUN helm package --save=false .
+CMD helm serve --address 0.0.0.0:8879 --repo-path .
+```
+https://github.com/enxebre/prometheus-operated-chart
+
+### Autoscaling
+We use autoscaling to test how we can scale our app.
+
+```kubectl autoscale deployment nasal-pig-ghost --min=2 --max=5 --cpu-percent=2```
+
+Generate load:
+
+```kubectl run -i --tty service-test --image=busybox /bin/sh```
+
+and run
+
+```while true; do wget -q -O- http://nasal-pig-ghost.52.215.24.82.nip.io/; done```
+
+Then you can scale the service-test deployment.
+
+### Problem
+
+We want to deploy the Ghost Chart with Helm and scale it horizontally.
+
+When deploying the Ghost chart a few things happen.
+
+- Within the container at build time:
+
+```nami unpack```
+
+https://github.com/bitnami/bitnami-docker-ghost/blob/0.11.7-r1/0/Dockerfile#L17
+
+https://github.com/bitnami/minideb-extras/blob/e99ac61664fc12e6cbdcc1005dac7a1f497dd73e/jessie/rootfs/usr/local/bin/bitnami-pkg
+
+- At runtime:
+
+```nami initialize```
+
+https://github.com/bitnami/bitnami-docker-ghost/blob/0.11.7-r1/0/rootfs/app-entrypoint.sh#L9
+
+https://github.com/bitnami/minideb-extras/blob/e99ac61664fc12e6cbdcc1005dac7a1f497dd73e/jessie/rootfs/opt/bitnami/base/helpers
+
+Which will run a post intallation hook unless a given folder specified in bitnami.json is initialized:
+
+https://downloads.bitnami.com/files/stacksmith/ghost-0.11.7-0-linux-x64-debian-8.tar.gz#
+
+```json
+    "persistDir": {
+      "description": "Directory to backup application folders",
+      "value": "/bitnami/ghost"
+    },
+```
+
+And it's not overridable at the env level https://github.com/bitnami/bitnami-docker-ghost/blob/0.11.7-r1/0/rootfs/ghost-inputs.json
+
+So the hook will try to do a full bootstrap, creating a database and config file and syslinking the "content" folder every time you run the container which we don't want:
+
+```javascript
+  if (!volumeFunctions.isInitialized($app.persistDir)) {
+    const domain = _.isEmpty($app.host) ? networkFunctions.getMachineIp() : $app.host;
+    databaseHandler.checkConnection();
+    databaseHandler.createDatabaseForApp($app.name);
+    $app.info('==> Creating database...');
+    $file.copy('config.example.js', confFile,
+                {owner: {username: $app.systemUser, group: $app.systemGroup}});
+    $file.substitute(confFile, /host:\s*'127.0.0.1'/, 'host: \'0.0.0.0\'');
+    $file.substitute(confFile, /client:\s*'sqlite3'/, 'client: \'mysql\'');
+    $file.substitute(confFile, /filename:\s*path\.join\(__dirname,\s*'\/content\/data\/ghost.*'\)/,
+                     `host     : '${databaseHandler.connection.host}',
+                port     : '${databaseHandler.connection.port}',
+                user     : '${databaseHandler.appDatabase.user}',
+                password : '${databaseHandler.appDatabase.password}',
+                database : '${databaseHandler.appDatabase.name}',
+                charset  : 'utf8'`);
+    $app.helpers.configureHost(domain);
+    $app.helpers.createAdminUser();
+    $app.helpers.configureSMTP($app.smtpHost, $app.smtpUser, $app.smtpPassword, $app.smtpService);
+    volumeFunctions.prepareDataToPersist($app.dataToPersist);
+  } else {
+    volumeFunctions.restorePersistedData($app.dataToPersist);
+  }
+ ```
+
+### Potential solutions
+
+- To change the run command so the entrypoint does not execute ```nami_initialize ghost```
+
+	https://github.com/bitnami/bitnami-docker-ghost/blob/0.11.7-r1/0/rootfs/app-entrypoint.sh#L8
+
+	So run this straight away:
+
+	```"command": "{{$app.installdir}}/node_modules/pm2/bin/pm2 start -p {{$app.installdir}}/tmp/pids/ghost.pid --merge-logs -l {{$app.logFile}}  index.js"```
+
+	*:x: Nami complains as it needs to finish the package installation. Side effects.*
+
+- To change the entrypoint so it doesn't run ```nami_initialize ghost```
+
+	*:x: We'd be skipping nami life cycle management.*
+
+- To share the given folder across all the Ghost instances in the cluster so they see the same data.
+
+	*:x: We don't want unnecessary state in services. Antipatern. Constrained by cloud, regions, underneath storage solution, etc.*
+
+- Assume we know the config ahead of time. Move it into a Kubernetes configMap. Prepopulate the ghost folder with a .initialized file so no bootstrap is required. The content should be moved out to a different layer.
+
+	https://github.com/TryGhost/Ghost/wiki/Using-a-custom-storage-module
+
+	:white_check_mark:
+
+```yaml
+persistence:
+  enabled: false
+
+serviceType: ClusterIP
+
+# Expose the service to an ingressController that will load balance across all the pods.
+ingressDomain: 52.215.24.82.nip.io
+
+# This will create a new user with permissions for the "blog" database. This parameters will be used by the configMap.
+mariadb:
+  mariadbRootPassword: rootUser0
+  mariadbUser: testUser
+  mariadbPassword: testUser0
+  mariadbDatabase: blog
+```
+
+We inject the config via volume plugin:
+
+```yaml
+  volumeMounts:
+  - name: config-volume
+    mountPath: /bitnami/ghost/config.js
+    subPath: config.js
+  - name: config-volume
+    mountPath: /bitnami/ghost/.initialized
+    subPath: .initialized.js          
+volumes:
+- name: config-volume
+  configMap:
+    name: {{ template "fullname" . }}        
+    items:
+      - key: config.js
+        path: config.js
+      - key: .initialized
+        path: .initialized
+```
+
+See also https://medium.com/capgemini-engineering/releasing-backward-incompatible-changes-kubernetes-jenkins-plugin-prometheus-operator-helm-self-6263ca61a1b1
+
+### Demo
+
+[![Helm Ghost Autoscaling](https://img.youtube.com/vi/eYQoGSmjIEA/0.jpg)](https://www.youtube.com/watch?v=eYQoGSmjIEA)
+
+
 ## Introduction
 
 This chart bootstraps a [Ghost](https://github.com/bitnami/bitnami-docker-ghost) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
